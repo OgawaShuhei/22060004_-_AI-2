@@ -47,7 +47,7 @@
 1. リポジトリをクローン
 ```bash
 git clone <repository-url>
-cd text-analysis-app
+cd 22060004_ogawa_kadai2
 ```
 
 2. 依存関係をインストール
@@ -57,6 +57,12 @@ pip install -r requirements.txt
 
 3. アプリケーションを起動
 ```bash
+# Windows環境の場合
+start_app.bat
+# または
+start_app.ps1
+
+# 直接実行の場合
 streamlit run app.py
 ```
 
@@ -102,19 +108,26 @@ streamlit run app.py
 ## プロジェクト構造
 
 ```
-text-analysis-app/
-├── app.py                 # Streamlitメインアプリケーション
-├── text_analyzer.py       # テキスト分析ロジック
-├── database_manager.py    # データベース管理
-├── url_analyzer.py        # URL分析機能（新規追加）
+22060004_ogawa_kadai2/
+├── app.py                 # メインStreamlitアプリケーション
+├── deploy.py              # Streamlit Cloudデプロイ用エントリーポイント
 ├── requirements.txt       # Python依存関係
-├── README.md             # プロジェクト説明
-├── .gitignore           # Git除外設定
-├── text_analysis.db     # SQLiteデータベース（自動生成）
-└── docs/                # ドキュメント
-    ├── system_design.png    # システム設計図
-    └── code_structure.png   # コード構造図
+├── .streamlit/            # Streamlit設定
+│   └── config.toml       # デプロイ設定
+├── src/                   # コアモジュール
+│   ├── __init__.py       # パッケージ初期化
+│   ├── text_analyzer.py  # テキスト分析エンジン
+│   ├── database_manager.py # データベース管理
+│   └── url_analyzer.py   # URL分析・Webスクレイピング
+├── start_app.bat          # Windows起動スクリプト（コマンドプロンプト）
+├── start_app.ps1          # Windows起動スクリプト（PowerShell）
+├── README.md              # プロジェクト概要
+├── README_Deploy.md       # デプロイ手順
+├── README_Windows.md      # Windows環境での使用方法
+└── .gitignore             # Git除外設定
 ```
+
+
 
 ## URL分析機能の詳細
 
@@ -153,13 +166,7 @@ text-analysis-app/
 - **フィルタリング**: 言語別フィルタリング
 - **削除機能**: 個別データの削除
 
-## システム設計図
 
-![システム設計図](docs/system_design.png)
-
-## コード構造図
-
-![コード構造図](docs/code_structure.png)
 
 ## 開発者向け情報
 

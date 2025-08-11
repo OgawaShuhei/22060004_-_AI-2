@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from text_analyzer import TextAnalyzer
-from database_manager import DatabaseManager
-from url_analyzer import URLAnalyzer
+from src.text_analyzer import TextAnalyzer
+from src.database_manager import DatabaseManager
+from src.url_analyzer import URLAnalyzer
 import os
 import base64
 import time
@@ -594,33 +594,39 @@ def show_history_page():
                     
                     with col2:
                         if st.button("🗑️ この分析を削除", type="secondary"):
-                            st.write(f"削除を試行中... ID: {selected_id}")
-                            try:
-                                # 削除前の確認
-                                before_delete = db_manager.get_analysis_by_id(selected_id)
-                                st.write(f"削除前のデータ: {before_delete is not None}")
+                            # 削除確認
+                            if st.checkbox("本当にこの分析を削除しますか？", key=f"confirm_delete_{selected_id}"):
+                                st.write(f"削除を試行中... ID: {selected_id}")
                                 
-                                # 削除実行
-                                delete_result = db_manager.delete_analysis(selected_id)
-                                st.write(f"削除結果: {delete_result}")
+                                # 削除前のデータ件数を確認
+                                before_count = len(db_manager.get_all_analyses())
+                                st.write(f"削除前のデータ件数: {before_count}")
                                 
-                                if delete_result:
-                                    st.success("分析結果を削除しました")
-                                    # 削除後にセッション状態をクリアして確実に更新
-                                    if 'selected_row_index' in st.session_state:
-                                        del st.session_state.selected_row_index
-                                    # 削除完了フラグを設定
-                                    st.session_state.deletion_success = True
-                                    # データベースから最新データを再取得
-                                    df = db_manager.get_all_analyses()
-                                    # 削除完了メッセージを表示してからリロード
-                                    st.info("データを更新中...")
-                                    time.sleep(1)
-                                    st.rerun()
-                                else:
-                                    st.error("削除に失敗しました")
-                            except Exception as e:
-                                st.error(f"削除中にエラーが発生: {str(e)}")
+                                try:
+                                    # 削除実行
+                                    delete_result = db_manager.delete_analysis(selected_id)
+                                    st.write(f"削除結果: {delete_result}")
+                                    
+                                    if delete_result:
+                                        # 削除後のデータ件数を確認
+                                        after_count = len(db_manager.get_all_analyses())
+                                        st.write(f"削除後のデータ件数: {after_count}")
+                                        
+                                        st.success("分析結果を削除しました")
+                                        # 削除完了フラグを設定
+                                        st.session_state.deletion_success = True
+                                        # セッション状態をクリア
+                                        if 'selected_row_index' in st.session_state:
+                                            del st.session_state.selected_row_index
+                                        # データを再取得して表示を更新
+                                        st.rerun()
+                                    else:
+                                        st.error("削除に失敗しました")
+                                except Exception as e:
+                                    st.error(f"削除中にエラーが発生: {str(e)}")
+                                    st.write(f"エラーの詳細: {type(e).__name__}: {str(e)}")
+                            else:
+                                st.info("削除をキャンセルしました")
                     
                     # テキスト内容の表示
                     with st.expander("テキスト内容を表示"):
@@ -780,33 +786,39 @@ def show_data_management_page():
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("🗑️ 選択した分析を削除", type="secondary"):
-                        st.write(f"削除を試行中... ID: {selected_id}")
-                        try:
-                            # 削除前の確認
-                            before_delete = db_manager.get_analysis_by_id(selected_id)
-                            st.write(f"削除前のデータ: {before_delete is not None}")
+                        # 削除確認
+                        if st.checkbox("本当にこの分析を削除しますか？", key=f"confirm_delete_management_{selected_id}"):
+                            st.write(f"削除を試行中... ID: {selected_id}")
                             
-                            # 削除実行
-                            delete_result = db_manager.delete_analysis(selected_id)
-                            st.write(f"削除結果: {delete_result}")
+                            # 削除前のデータ件数を確認
+                            before_count = len(db_manager.get_all_analyses())
+                            st.write(f"削除前のデータ件数: {before_count}")
                             
-                            if delete_result:
-                                st.success("分析結果を削除しました")
-                                # 削除後にセッション状態をクリアして確実に更新
-                                if 'selected_row_index' in st.session_state:
-                                    del st.session_state.selected_row_index
-                                # 削除完了フラグを設定
-                                st.session_state.deletion_success = True
-                                # データベースから最新データを再取得
-                                df = db_manager.get_all_analyses()
-                                # 削除完了メッセージを表示してからリロード
-                                st.info("データを更新中...")
-                                time.sleep(1)
-                                st.rerun()
-                            else:
-                                st.error("削除に失敗しました")
-                        except Exception as e:
-                            st.error(f"削除中にエラーが発生: {str(e)}")
+                            try:
+                                # 削除実行
+                                delete_result = db_manager.delete_analysis(selected_id)
+                                st.write(f"削除結果: {delete_result}")
+                                
+                                if delete_result:
+                                    # 削除後のデータ件数を確認
+                                    after_count = len(db_manager.get_all_analyses())
+                                    st.write(f"削除後のデータ件数: {after_count}")
+                                    
+                                    st.success("分析結果を削除しました")
+                                    # 削除完了フラグを設定
+                                    st.session_state.deletion_success = True
+                                    # セッション状態をクリア
+                                    if 'selected_row_index' in st.session_state:
+                                        del st.session_state.selected_row_index
+                                    # データを再取得して表示を更新
+                                    st.rerun()
+                                else:
+                                    st.error("削除に失敗しました")
+                            except Exception as e:
+                                st.error(f"削除中にエラーが発生: {str(e)}")
+                                st.write(f"エラーの詳細: {type(e).__name__}: {str(e)}")
+                        else:
+                            st.info("削除をキャンセルしました")
                 
                 with col2:
                     if st.button("🗑️ 全データを削除", type="secondary"):

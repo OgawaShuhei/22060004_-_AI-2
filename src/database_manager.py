@@ -127,8 +127,20 @@ class DatabaseManager:
     
     def get_analysis_by_id(self, analysis_id):
         """特定の分析結果を取得"""
+        # IDを整数に変換
+        try:
+            analysis_id = int(analysis_id)
+        except (ValueError, TypeError):
+            print(f"無効なID形式: {analysis_id} (型: {type(analysis_id)})")
+            return None
+        
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+        
+        # 列名を事前に取得
+        cursor.execute("PRAGMA table_info(analysis_results)")
+        table_info = cursor.fetchall()
+        columns = [col[1] for col in table_info]
         
         cursor.execute('''
             SELECT * FROM analysis_results WHERE id = ?
@@ -139,15 +151,18 @@ class DatabaseManager:
         
         if result:
             # 結果を辞書形式に変換
-            columns = [description[0] for description in cursor.description]
             analysis_dict = dict(zip(columns, result))
             
             # JSON文字列を辞書に変換
             for col in ['basic_stats', 'language_detection', 'sentiment_analysis',
                        'readability_score', 'word_frequency', 'sentence_analysis',
                        'character_analysis']:
-                if analysis_dict[col]:
-                    analysis_dict[col] = json.loads(analysis_dict[col])
+                if analysis_dict.get(col):
+                    try:
+                        analysis_dict[col] = json.loads(analysis_dict[col])
+                    except json.JSONDecodeError as e:
+                        print(f"JSON解析エラー (列: {col}): {str(e)}")
+                        analysis_dict[col] = {}
             
             return analysis_dict
         
@@ -155,6 +170,13 @@ class DatabaseManager:
     
     def delete_analysis(self, analysis_id):
         """分析結果を削除"""
+        # IDを整数に変換
+        try:
+            analysis_id = int(analysis_id)
+        except (ValueError, TypeError):
+            print(f"無効なID形式: {analysis_id} (型: {type(analysis_id)})")
+            return False
+        
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -162,6 +184,11 @@ class DatabaseManager:
             # 削除前の確認
             cursor.execute('SELECT COUNT(*) FROM analysis_results WHERE id = ?', (analysis_id,))
             before_count = cursor.fetchone()[0]
+            
+            if before_count == 0:
+                print(f"削除対象が見つかりません: ID={analysis_id}")
+                conn.close()
+                return False
             
             # 削除実行
             cursor.execute('DELETE FROM analysis_results WHERE id = ?', (analysis_id,))
@@ -171,13 +198,23 @@ class DatabaseManager:
             cursor.execute('SELECT COUNT(*) FROM analysis_results WHERE id = ?', (analysis_id,))
             after_count = cursor.fetchone()[0]
             
+            # コミット前に再度確認
             conn.commit()
+            
+            # 最終確認
+            cursor.execute('SELECT COUNT(*) FROM analysis_results WHERE id = ?', (analysis_id,))
+            final_count = cursor.fetchone()[0]
+            
             conn.close()
             
             # デバッグ情報
-            print(f"削除処理: ID={analysis_id}, 削除前={before_count}, 削除後={after_count}, 削除行数={deleted_rows}")
+            print(f"削除処理: ID={analysis_id}, 削除前={before_count}, 削除後={after_count}, 最終確認={final_count}, 削除行数={deleted_rows}")
             
-            return deleted_rows > 0
+            # 削除が成功したかどうかを厳密にチェック
+            success = (before_count > 0) and (final_count == 0) and (deleted_rows == 1)
+            print(f"削除成功判定: {success}")
+            
+            return success
         except Exception as e:
             print(f"削除処理でエラー: {str(e)}")
             return False

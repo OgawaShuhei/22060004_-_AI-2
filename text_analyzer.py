@@ -73,11 +73,13 @@ class TextAnalyzer:
             }
             return {
                 'detected_language': lang,
+                'language_code': lang,
                 'language_name': lang_names.get(lang, f'言語コード: {lang}')
             }
         except:
             return {
                 'detected_language': 'unknown',
+                'language_code': 'unknown',
                 'language_name': '検出できませんでした'
             }
     

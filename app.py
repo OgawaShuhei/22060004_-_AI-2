@@ -7,6 +7,7 @@ from database_manager import DatabaseManager
 from url_analyzer import URLAnalyzer
 import os
 import base64
+import time
 
 # ページ設定
 st.set_page_config(
@@ -58,8 +59,8 @@ st.markdown("""
 def init_analyzer():
     return TextAnalyzer()
 
-@st.cache_resource
 def init_database():
+    """データベースを初期化（キャッシュなし）"""
     return DatabaseManager()
 
 @st.cache_resource
@@ -84,22 +85,49 @@ def get_download_link(data, filename, file_type):
 
 # メインアプリケーション
 def main():
+    global db_manager
+    
+    # データベースの初期化確認
+    try:
+        # データベースの状態を確認
+        db_manager.debug_database_state()
+    except Exception as e:
+        st.error(f"データベースの初期化に失敗しました: {str(e)}")
+        st.info("データベースを再初期化しています...")
+        try:
+            # データベースを再初期化
+            db_manager = DatabaseManager()
+            st.success("データベースの初期化が完了しました")
+        except Exception as e2:
+            st.error(f"データベースの再初期化に失敗しました: {str(e2)}")
+            st.stop()
+    
+    # セッション状態でページ管理
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = "🏠 ホーム"
+    
     # サイドバーでページ選択
     st.sidebar.title("📊 テキスト分析アプリ")
     page = st.sidebar.selectbox(
         "ページを選択",
-        ["🏠 ホーム", "📝 テキスト分析", "📚 分析履歴", "📊 統計情報", "💾 データ管理"]
+        ["🏠 ホーム", "📝 テキスト分析", "📚 分析履歴", "📊 統計情報", "💾 データ管理"],
+        index=["🏠 ホーム", "📝 テキスト分析", "📚 分析履歴", "📊 統計情報", "💾 データ管理"].index(st.session_state.current_page)
     )
     
-    if page == "🏠 ホーム":
+    # ページが変更された場合、セッション状態を更新
+    if page != st.session_state.current_page:
+        st.session_state.current_page = page
+        st.rerun()
+    
+    if st.session_state.current_page == "🏠 ホーム":
         show_home_page()
-    elif page == "📝 テキスト分析":
+    elif st.session_state.current_page == "📝 テキスト分析":
         show_analysis_page()
-    elif page == "📚 分析履歴":
+    elif st.session_state.current_page == "📚 分析履歴":
         show_history_page()
-    elif page == "📊 統計情報":
+    elif st.session_state.current_page == "📊 統計情報":
         show_statistics_page()
-    elif page == "💾 データ管理":
+    elif st.session_state.current_page == "💾 データ管理":
         show_data_management_page()
 
 def show_home_page():
@@ -163,7 +191,8 @@ def show_home_page():
         
         with col2:
             if st.button("📝 詳細分析ページへ"):
-                st.switch_page("📝 テキスト分析")
+                st.session_state.current_page = "📝 テキスト分析"
+                st.rerun()
     
     # ファイルアップロード
     elif input_method == "ファイルアップロード":
@@ -194,7 +223,8 @@ def show_home_page():
             
             with col2:
                 if st.button("📝 詳細分析ページへ"):
-                    st.switch_page("📝 テキスト分析")
+                    st.session_state.current_page = "📝 テキスト分析"
+                    st.rerun()
     
     # URL分析
     else:
@@ -238,7 +268,8 @@ def show_home_page():
             
             with col2:
                 if st.button("📝 詳細分析ページへ"):
-                    st.switch_page("📝 テキスト分析")
+                    st.session_state.current_page = "📝 テキスト分析"
+                    st.rerun()
     
     # ホームページでの結果表示（簡易版）
     if 'home_results' in st.session_state:
@@ -269,7 +300,9 @@ def show_home_page():
         
         col1, col2 = st.columns(2)
         with col1:
-            st.info(f"🌍 **検出された言語:** {lang['language_name']} ({lang['language_code']})")
+            # 古いデータとの互換性のため、安全に言語コードを取得
+            language_code = lang.get('language_code', lang.get('detected_language', 'unknown'))
+            st.info(f"🌍 **検出された言語:** {lang['language_name']} ({language_code})")
         
         with col2:
             sentiment_color = "green" if sentiment['sentiment'] == 'ポジティブ' else "red" if sentiment['sentiment'] == 'ネガティブ' else "orange"
@@ -280,11 +313,13 @@ def show_home_page():
         col1, col2 = st.columns(2)
         with col1:
             if st.button("📊 詳細結果を表示", type="secondary"):
-                st.switch_page("📝 テキスト分析")
+                st.session_state.current_page = "📝 テキスト分析"
+                st.rerun()
         
         with col2:
             if st.button("📚 分析履歴を確認", type="secondary"):
-                st.switch_page("📚 分析履歴")
+                st.session_state.current_page = "📚 分析履歴"
+                st.rerun()
     
     st.markdown("---")
     
@@ -332,7 +367,8 @@ def show_home_page():
         )
         
         if st.button("📚 全履歴を表示"):
-            st.switch_page("📚 分析履歴")
+            st.session_state.current_page = "📚 分析履歴"
+            st.rerun()
     else:
         st.info("まだ分析履歴がありません。テキスト分析を行ってください。")
 
@@ -452,6 +488,26 @@ def show_history_page():
     # 履歴データの取得
     df = db_manager.get_all_analyses()
     
+    # デバッグ情報を表示
+    st.write(f"データベースから取得した行数: {len(df)}")
+    if not df.empty:
+        st.write(f"データフレームの列: {list(df.columns)}")
+        st.write(f"最初の行のID: {df.iloc[0]['id'] if 'id' in df.columns else 'ID列なし'}")
+    
+    # データベースの状態を確認
+    if st.button("🔍 データベース状態を確認"):
+        debug_info = db_manager.debug_database_state()
+        if debug_info:
+            st.write("**データベース状態:**")
+            st.write(f"- 総件数: {debug_info['total_count']}")
+            st.write(f"- 最小ID: {debug_info['min_id']}")
+            st.write(f"- 最大ID: {debug_info['max_id']}")
+            st.write("**テーブル構造:**")
+            for col in debug_info['table_info']:
+                st.write(f"- {col[1]} ({col[2]})")
+        else:
+            st.error("データベース状態の取得に失敗しました")
+    
     if df.empty:
         st.info("まだ分析履歴がありません。テキスト分析を行ってください。")
         return
@@ -478,49 +534,107 @@ def show_history_page():
             lambda x: x.get('language_name', '不明') if x else '不明'
         ) == language_filter]
     
+    # 削除完了メッセージの表示
+    if st.session_state.get('deletion_success', False):
+        st.success("✅ データの削除が完了しました")
+        # フラグをクリア
+        st.session_state.deletion_success = False
+    
     # 履歴テーブル
     st.subheader(f"分析履歴 ({len(df)}件)")
     
-    # 表示用データフレーム
+    # 表示用データフレーム（インデックスを保持）
     display_df = df[['id', 'timestamp', 'file_name', 'text_length']].copy()
     display_df['file_name'] = display_df['file_name'].fillna('テキスト入力')
     display_df.columns = ['ID', 'タイムスタンプ', 'ファイル名', '文字数']
     
-    # 選択可能なテーブル
-    selected_indices = st.data_editor(
+    # データ表示と選択
+    st.dataframe(
         display_df,
         hide_index=True,
         use_container_width=True
     )
     
-    # 詳細表示
-    if selected_indices:
-        selected_id = df.iloc[selected_indices[0]]['id']
-        analysis = db_manager.get_analysis_by_id(selected_id)
+    # 行選択用のセレクトボックス
+    if len(display_df) > 0:
+        # デバッグ情報を表示
+        st.write(f"データフレームの行数: {len(display_df)}")
+        st.write(f"データフレームの列: {list(display_df.columns)}")
         
-        if analysis:
-            st.subheader(f"分析詳細 (ID: {selected_id})")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"**タイムスタンプ:** {analysis['timestamp']}")
-                st.write(f"**ファイル名:** {analysis['file_name'] or 'テキスト入力'}")
-                st.write(f"**文字数:** {analysis['text_length']:,}")
-            
-            with col2:
-                if st.button("🗑️ この分析を削除", type="secondary"):
-                    if db_manager.delete_analysis(selected_id):
-                        st.success("分析結果を削除しました")
-                        st.rerun()
-                    else:
-                        st.error("削除に失敗しました")
-            
-            # テキスト内容の表示
-            with st.expander("テキスト内容を表示"):
-                st.text_area("テキスト内容", analysis['text_content'], height=200, disabled=True)
-            
-            # 分析結果の表示
-            display_results(analysis)
+        row_options = [f"ID: {row['ID']} - {row['ファイル名']} ({row['タイムスタンプ']})" for _, row in display_df.iterrows()]
+        selected_row_index = st.selectbox(
+            "詳細を表示する行を選択してください",
+            options=range(len(display_df)),
+            format_func=lambda x: row_options[x] if x < len(row_options) else "選択してください"
+        )
+        
+        # デバッグ情報を表示
+        st.write(f"選択された行のインデックス: {selected_row_index}")
+        
+        # 詳細表示
+        if selected_row_index is not None and selected_row_index < len(display_df):
+            try:
+                # 選択された行のIDを取得
+                original_index = display_df.index[selected_row_index]
+                selected_id = df.loc[original_index, 'id']
+                
+                st.write(f"元のインデックス: {original_index}")
+                st.write(f"選択されたID: {selected_id}")
+                
+                analysis = db_manager.get_analysis_by_id(selected_id)
+                
+                if analysis:
+                    st.subheader(f"分析詳細 (ID: {selected_id})")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**タイムスタンプ:** {analysis['timestamp']}")
+                        st.write(f"**ファイル名:** {analysis['file_name'] or 'テキスト入力'}")
+                        st.write(f"**文字数:** {analysis['text_length']:,}")
+                    
+                    with col2:
+                        if st.button("🗑️ この分析を削除", type="secondary"):
+                            st.write(f"削除を試行中... ID: {selected_id}")
+                            try:
+                                # 削除前の確認
+                                before_delete = db_manager.get_analysis_by_id(selected_id)
+                                st.write(f"削除前のデータ: {before_delete is not None}")
+                                
+                                # 削除実行
+                                delete_result = db_manager.delete_analysis(selected_id)
+                                st.write(f"削除結果: {delete_result}")
+                                
+                                if delete_result:
+                                    st.success("分析結果を削除しました")
+                                    # 削除後にセッション状態をクリアして確実に更新
+                                    if 'selected_row_index' in st.session_state:
+                                        del st.session_state.selected_row_index
+                                    # 削除完了フラグを設定
+                                    st.session_state.deletion_success = True
+                                    # データベースから最新データを再取得
+                                    df = db_manager.get_all_analyses()
+                                    # 削除完了メッセージを表示してからリロード
+                                    st.info("データを更新中...")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("削除に失敗しました")
+                            except Exception as e:
+                                st.error(f"削除中にエラーが発生: {str(e)}")
+                    
+                    # テキスト内容の表示
+                    with st.expander("テキスト内容を表示"):
+                        st.text_area("テキスト内容", analysis['text_content'], height=200, disabled=True)
+                    
+                    # 分析結果の表示
+                    display_results(analysis)
+                else:
+                    st.error(f"ID {selected_id} の分析結果が見つかりません")
+            except (IndexError, KeyError) as e:
+                st.error(f"エラーが発生しました: {str(e)}")
+                st.warning("選択された行の処理中にエラーが発生しました。再度選択してください。")
+        else:
+            st.info("行を選択してください")
 
 def show_statistics_page():
     """統計情報ページ"""
@@ -587,6 +701,12 @@ def show_data_management_page():
     
     df = db_manager.get_all_analyses()
     
+    # デバッグ情報を表示
+    st.write(f"データベースから取得した行数: {len(df)}")
+    if not df.empty:
+        st.write(f"データフレームの列: {list(df.columns)}")
+        st.write(f"最初の行のID: {df.iloc[0]['id'] if 'id' in df.columns else 'ID列なし'}")
+    
     if df.empty:
         st.info("まだ分析データがありません。")
         return
@@ -610,6 +730,12 @@ def show_data_management_page():
     
     st.markdown("---")
     
+    # 削除完了メッセージの表示
+    if st.session_state.get('deletion_success', False):
+        st.success("✅ データの削除が完了しました")
+        # フラグをクリア
+        st.session_state.deletion_success = False
+    
     # データ削除機能
     st.subheader("🗑️ データ削除")
     
@@ -618,30 +744,80 @@ def show_data_management_page():
     display_df['file_name'] = display_df['file_name'].fillna('テキスト入力')
     display_df.columns = ['ID', 'タイムスタンプ', 'ファイル名', '文字数']
     
-    selected_indices = st.data_editor(
+    # データ表示と選択
+    st.dataframe(
         display_df,
         hide_index=True,
         use_container_width=True
     )
     
-    if selected_indices:
-        selected_id = df.iloc[selected_indices[0]]['id']
-        st.write(f"選択された分析ID: {selected_id}")
+    # 行選択用のセレクトボックス
+    if len(display_df) > 0:
+        # デバッグ情報を表示
+        st.write(f"データフレームの行数: {len(display_df)}")
+        st.write(f"データフレームの列: {list(display_df.columns)}")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🗑️ 選択した分析を削除", type="secondary"):
-                if db_manager.delete_analysis(selected_id):
-                    st.success("分析結果を削除しました")
-                    st.rerun()
-                else:
-                    st.error("削除に失敗しました")
+        row_options = [f"ID: {row['ID']} - {row['ファイル名']} ({row['タイムスタンプ']})" for _, row in display_df.iterrows()]
+        selected_row_index = st.selectbox(
+            "削除する行を選択してください",
+            options=range(len(display_df)),
+            format_func=lambda x: row_options[x] if x < len(row_options) else "選択してください"
+        )
         
-        with col2:
-            if st.button("🗑️ 全データを削除", type="secondary"):
-                if st.checkbox("本当に全データを削除しますか？"):
-                    # 全データ削除の実装
-                    st.warning("この機能は実装中です")
+        # デバッグ情報を表示
+        st.write(f"選択された行のインデックス: {selected_row_index}")
+        
+        # 選択された行の処理
+        if selected_row_index is not None and selected_row_index < len(display_df):
+            try:
+                # 選択された行のIDを取得
+                original_index = display_df.index[selected_row_index]
+                selected_id = df.loc[original_index, 'id']
+                
+                st.write(f"元のインデックス: {original_index}")
+                st.write(f"選択された分析ID: {selected_id}")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🗑️ 選択した分析を削除", type="secondary"):
+                        st.write(f"削除を試行中... ID: {selected_id}")
+                        try:
+                            # 削除前の確認
+                            before_delete = db_manager.get_analysis_by_id(selected_id)
+                            st.write(f"削除前のデータ: {before_delete is not None}")
+                            
+                            # 削除実行
+                            delete_result = db_manager.delete_analysis(selected_id)
+                            st.write(f"削除結果: {delete_result}")
+                            
+                            if delete_result:
+                                st.success("分析結果を削除しました")
+                                # 削除後にセッション状態をクリアして確実に更新
+                                if 'selected_row_index' in st.session_state:
+                                    del st.session_state.selected_row_index
+                                # 削除完了フラグを設定
+                                st.session_state.deletion_success = True
+                                # データベースから最新データを再取得
+                                df = db_manager.get_all_analyses()
+                                # 削除完了メッセージを表示してからリロード
+                                st.info("データを更新中...")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("削除に失敗しました")
+                        except Exception as e:
+                            st.error(f"削除中にエラーが発生: {str(e)}")
+                
+                with col2:
+                    if st.button("🗑️ 全データを削除", type="secondary"):
+                        if st.checkbox("本当に全データを削除しますか？"):
+                            # 全データ削除の実装
+                            st.warning("この機能は実装中です")
+            except (IndexError, KeyError) as e:
+                st.error(f"エラーが発生しました: {str(e)}")
+                st.warning("選択された行の処理中にエラーが発生しました。再度選択してください。")
+        else:
+            st.info("行を選択してください")
 
 def display_results(results):
     """分析結果を表示"""
@@ -673,7 +849,9 @@ def display_results(results):
     # 言語検出
     with tab2:
         lang = results['language_detection']
-        st.info(f"🌍 検出された言語: **{lang['language_name']}** ({lang['language_code']})")
+        # 古いデータとの互換性のため、安全に言語コードを取得
+        language_code = lang.get('language_code', lang.get('detected_language', 'unknown'))
+        st.info(f"🌍 検出された言語: **{lang['language_name']}** ({language_code})")
     
     # 感情分析
     with tab3:

@@ -11,47 +11,65 @@ class DatabaseManager:
     def __init__(self, db_path="text_analysis.db"):
         """初期化"""
         self.db_path = db_path
+        print(f"データベースマネージャーを初期化中: {self.db_path}")
         self.init_database()
+        print("データベースマネージャーの初期化が完了しました")
     
     def init_database(self):
         """データベースの初期化"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # 分析結果テーブルの作成
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS analysis_results (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                text_content TEXT,
-                text_length INTEGER,
-                analysis_type TEXT,
-                basic_stats TEXT,
-                language_detection TEXT,
-                sentiment_analysis TEXT,
-                readability_score TEXT,
-                word_frequency TEXT,
-                sentence_analysis TEXT,
-                character_analysis TEXT,
-                file_name TEXT,
-                file_size INTEGER
-            )
-        ''')
-        
-        # 統計情報テーブルの作成
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS statistics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date TEXT NOT NULL,
-                total_analyses INTEGER,
-                avg_text_length REAL,
-                most_common_language TEXT,
-                avg_sentiment_score REAL
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # 分析結果テーブルの作成
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS analysis_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    text_content TEXT,
+                    text_length INTEGER,
+                    analysis_type TEXT,
+                    basic_stats TEXT,
+                    language_detection TEXT,
+                    sentiment_analysis TEXT,
+                    readability_score TEXT,
+                    word_frequency TEXT,
+                    sentence_analysis TEXT,
+                    character_analysis TEXT,
+                    file_name TEXT,
+                    file_size INTEGER
+                )
+            ''')
+            
+            # 統計情報テーブルの作成
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS statistics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    total_analyses INTEGER,
+                    avg_text_length REAL,
+                    most_common_language TEXT,
+                    avg_sentiment_score REAL
+                )
+            ''')
+            
+            conn.commit()
+            conn.close()
+            print(f"データベース '{self.db_path}' の初期化が完了しました")
+        except Exception as e:
+            print(f"データベース初期化エラー: {str(e)}")
+            # データベースファイルが破損している場合は削除して再作成
+            if os.path.exists(self.db_path):
+                try:
+                    os.remove(self.db_path)
+                    print(f"破損したデータベースファイル '{self.db_path}' を削除しました")
+                    # 再帰的に初期化を試行
+                    self.init_database()
+                except Exception as e2:
+                    print(f"データベースファイルの削除に失敗: {str(e2)}")
+                    raise e2
+            else:
+                raise e
     
     def save_analysis_result(self, text_content, results, file_name=None, file_size=None):
         """分析結果をデータベースに保存"""
@@ -137,14 +155,32 @@ class DatabaseManager:
     
     def delete_analysis(self, analysis_id):
         """分析結果を削除"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM analysis_results WHERE id = ?', (analysis_id,))
-        conn.commit()
-        conn.close()
-        
-        return cursor.rowcount > 0
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # 削除前の確認
+            cursor.execute('SELECT COUNT(*) FROM analysis_results WHERE id = ?', (analysis_id,))
+            before_count = cursor.fetchone()[0]
+            
+            # 削除実行
+            cursor.execute('DELETE FROM analysis_results WHERE id = ?', (analysis_id,))
+            deleted_rows = cursor.rowcount
+            
+            # 削除後の確認
+            cursor.execute('SELECT COUNT(*) FROM analysis_results WHERE id = ?', (analysis_id,))
+            after_count = cursor.fetchone()[0]
+            
+            conn.commit()
+            conn.close()
+            
+            # デバッグ情報
+            print(f"削除処理: ID={analysis_id}, 削除前={before_count}, 削除後={after_count}, 削除行数={deleted_rows}")
+            
+            return deleted_rows > 0
+        except Exception as e:
+            print(f"削除処理でエラー: {str(e)}")
+            return False
     
     def export_to_csv(self, analysis_ids=None):
         """分析結果をCSVファイルにエクスポート"""
@@ -301,6 +337,9 @@ class DatabaseManager:
         cursor.execute('SELECT AVG(text_length) FROM analysis_results')
         avg_text_length = cursor.fetchone()[0] or 0
         
+        # デバッグ情報
+        print(f"統計情報: 総分析数={total_analyses}, 平均テキスト長={avg_text_length}")
+        
         # 最も一般的な言語
         cursor.execute('''
             SELECT language_detection, COUNT(*) as count
@@ -334,3 +373,41 @@ class DatabaseManager:
             'most_common_language': most_common_language,
             'avg_sentiment_score': round(avg_sentiment_score, 1)
         }
+    
+    def debug_database_state(self):
+        """データベースの状態をデバッグ用に表示"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # テーブル構造の確認
+            cursor.execute("PRAGMA table_info(analysis_results)")
+            table_info = cursor.fetchall()
+            
+            # データ件数の確認
+            cursor.execute("SELECT COUNT(*) FROM analysis_results")
+            total_count = cursor.fetchone()[0]
+            
+            # 最新のIDを確認
+            cursor.execute("SELECT MAX(id) FROM analysis_results")
+            max_id = cursor.fetchone()[0]
+            
+            # 最小のIDを確認
+            cursor.execute("SELECT MIN(id) FROM analysis_results")
+            min_id = cursor.fetchone()[0]
+            
+            conn.close()
+            
+            debug_info = {
+                'table_info': table_info,
+                'total_count': total_count,
+                'max_id': max_id,
+                'min_id': min_id
+            }
+            
+            print(f"データベース状態: {debug_info}")
+            return debug_info
+            
+        except Exception as e:
+            print(f"データベース状態確認でエラー: {str(e)}")
+            return None

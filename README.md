@@ -127,7 +127,169 @@ streamlit run app.py
 └── .gitignore             # Git除外設定
 ```
 
+## システム設計図
 
+### システムアーキテクチャ
+
+```mermaid
+graph TB
+    subgraph "フロントエンド"
+        UI[Streamlit UI]
+    end
+    
+    subgraph "バックエンド"
+        MA[メインアプリ<br/>app.py]
+        TA[テキスト分析<br/>text_analyzer.py]
+        UA[URL分析<br/>url_analyzer.py]
+        DM[データベース管理<br/>database_manager.py]
+    end
+    
+    subgraph "データ層"
+        DB[(SQLite DB)]
+        FS[ファイルシステム]
+    end
+    
+    subgraph "外部ライブラリ"
+        NLTK[NLTK<br/>自然言語処理]
+        TB[TextBlob<br/>感情分析]
+        LD[langdetect<br/>言語検出]
+        BS[BeautifulSoup4<br/>HTML解析]
+        REQ[Requests<br/>HTTP通信]
+    end
+    
+    subgraph "外部サービス"
+        WEB[Webページ]
+    end
+    
+    UI --> MA
+    MA --> TA
+    MA --> UA
+    MA --> DM
+    TA --> NLTK
+    TA --> TB
+    TA --> LD
+    UA --> REQ
+    UA --> BS
+    UA --> WEB
+    DM --> DB
+    DM --> FS
+```
+
+### データフロー図
+
+```mermaid
+flowchart TD
+    A[ユーザー入力] --> B{入力タイプ}
+    
+    B -->|テキスト| C[テキスト分析]
+    B -->|ファイル| D[ファイル読み込み]
+    B -->|URL| E[URL分析]
+    
+    D --> C
+    E --> F[Webスクレイピング]
+    F --> G[テキスト抽出]
+    G --> C
+    
+    C --> H[分析処理]
+    H --> I[基本統計]
+    H --> J[言語検出]
+    H --> K[感情分析]
+    H --> L[可読性分析]
+    H --> M[単語頻度分析]
+    
+    I --> N[結果統合]
+    J --> N
+    K --> N
+    L --> N
+    M --> N
+    
+    N --> O[データベース保存]
+    N --> P[結果表示]
+    
+    O --> Q[履歴管理]
+    P --> R[ユーザー確認]
+```
+
+### クラス図
+
+```mermaid
+classDiagram
+    class TextAnalyzer {
+        +analyze_text(text: str) dict
+        +get_basic_stats(text: str) dict
+        +detect_language(text: str) str
+        +analyze_sentiment(text: str) dict
+        +calculate_readability(text: str) dict
+        +analyze_word_frequency(text: str) dict
+        +analyze_sentences(text: str) dict
+        +analyze_characters(text: str) dict
+    }
+    
+    class URLAnalyzer {
+        +extract_text_from_url(url: str) dict
+        +validate_url(url: str) bool
+        +scrape_webpage(url: str) str
+        +clean_html_content(html: str) str
+    }
+    
+    class DatabaseManager {
+        +init_database()
+        +save_analysis_result(data: dict) bool
+        +get_all_results() list
+        +search_results(query: str) list
+        +delete_result(result_id: int) bool
+        +export_to_csv() str
+        +export_to_txt() str
+        +get_statistics() dict
+    }
+    
+    class StreamlitApp {
+        +main()
+        +home_page()
+        +text_analysis_page()
+        +url_analysis_page()
+        +history_page()
+        +statistics_page()
+    }
+    
+    StreamlitApp --> TextAnalyzer
+    StreamlitApp --> URLAnalyzer
+    StreamlitApp --> DatabaseManager
+```
+
+### データベース設計
+
+```mermaid
+erDiagram
+    ANALYSIS_RESULTS {
+        int id PK
+        text text_content
+        text file_name
+        text url
+        text language
+        float sentiment_score
+        float subjectivity_score
+        float readability_score
+        int char_count
+        int word_count
+        int sentence_count
+        int paragraph_count
+        text word_frequency
+        text sentence_lengths
+        text char_frequency
+        datetime timestamp
+    }
+    
+    ANALYSIS_RESULTS ||--o{ EXPORT_HISTORY : "generates"
+    
+    EXPORT_HISTORY {
+        int id PK
+        int analysis_id FK
+        text export_type
+        text file_path
+        datetime export_time
+    }
+```
 
 ## URL分析機能の詳細
 

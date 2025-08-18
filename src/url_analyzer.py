@@ -42,12 +42,17 @@ class URLAnalyzer:
             url = result
             
             # ページを取得
-            with st.spinner("URLからテキストを取得中..."):
+            try:
                 response = self.session.get(url, timeout=10)
                 response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                return False, f"URLへのアクセスに失敗しました: {str(e)}"
             
             # HTMLを解析
-            soup = BeautifulSoup(response.content, 'html.parser')
+            try:
+                soup = BeautifulSoup(response.content, 'html.parser')
+            except Exception as e:
+                return False, f"HTMLの解析に失敗しました: {str(e)}"
             
             # 不要な要素を削除
             for element in soup(['script', 'style', 'nav', 'header', 'footer', 'aside']):
@@ -82,8 +87,6 @@ class URLAnalyzer:
             
             return True, cleaned_text
             
-        except requests.exceptions.RequestException as e:
-            return False, f"URLへのアクセスに失敗しました: {str(e)}"
         except Exception as e:
             return False, f"テキスト抽出中にエラーが発生しました: {str(e)}"
     
@@ -106,8 +109,38 @@ class URLAnalyzer:
     def get_page_info(self, url):
         """ページの基本情報を取得"""
         try:
-            response = self.session.get(url, timeout=10)
-            soup = BeautifulSoup(response.content, 'html.parser')
+            # URLの妥当性をチェック
+            is_valid, result = self.validate_url(url)
+            if not is_valid:
+                return {
+                    'title': "URLが無効です",
+                    'description': result,
+                    'char_count': 0,
+                    'url': url
+                }
+            
+            url = result
+            
+            try:
+                response = self.session.get(url, timeout=10)
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                return {
+                    'title': "アクセスエラー",
+                    'description': f"ページにアクセスできません: {str(e)}",
+                    'char_count': 0,
+                    'url': url
+                }
+            
+            try:
+                soup = BeautifulSoup(response.content, 'html.parser')
+            except Exception as e:
+                return {
+                    'title': "解析エラー",
+                    'description': f"HTMLの解析に失敗: {str(e)}",
+                    'char_count': 0,
+                    'url': url
+                }
             
             # タイトルを取得
             title = soup.find('title')

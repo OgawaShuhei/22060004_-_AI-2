@@ -1,64 +1,32 @@
-# テキスト分析アプリ - PowerShell起動スクリプト
-# 実行ポリシーを変更する必要がある場合: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "テキスト分析アプリ - PowerShell起動スクリプト" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
+# テキスト分析アプリ起動スクリプト (PowerShell)
+Write-Host "テキスト分析アプリを起動中..." -ForegroundColor Green
 Write-Host ""
 
-# Pythonのバージョンを確認
-Write-Host "Pythonのバージョンを確認中..." -ForegroundColor Yellow
+# Pythonがインストールされているかチェック
 try {
     $pythonVersion = python --version 2>&1
-    Write-Host "Python: $pythonVersion" -ForegroundColor Green
+    Write-Host "Pythonバージョン: $pythonVersion" -ForegroundColor Cyan
 } catch {
-    Write-Host "エラー: Pythonが見つかりません" -ForegroundColor Red
-    Write-Host "Pythonがインストールされているか、PATHに追加されているか確認してください" -ForegroundColor Red
+    Write-Host "エラー: Pythonがインストールされていません。" -ForegroundColor Red
+    Write-Host "Python 3.8以上をインストールしてください。" -ForegroundColor Yellow
     Read-Host "Enterキーを押して終了"
     exit 1
 }
 
-Write-Host ""
-
-# pipのバージョンを確認
-Write-Host "pipのバージョンを確認中..." -ForegroundColor Yellow
-try {
-    $pipVersion = pip --version 2>&1
-    Write-Host "pip: $pipVersion" -ForegroundColor Green
-} catch {
-    Write-Host "エラー: pipが見つかりません" -ForegroundColor Red
-    Write-Host "pipをインストールしてください: python -m ensurepip --upgrade" -ForegroundColor Red
-    Read-Host "Enterキーを押して終了"
-    exit 1
-}
-
-Write-Host ""
-
-# 依存関係をインストール
-Write-Host "依存関係をインストール中..." -ForegroundColor Yellow
-try {
+# 仮想環境が存在するかチェック
+if (Test-Path "venv\Scripts\Activate.ps1") {
+    Write-Host "仮想環境を有効化中..." -ForegroundColor Cyan
+    & "venv\Scripts\Activate.ps1"
+} else {
+    Write-Host "仮想環境が見つかりません。新しく作成します..." -ForegroundColor Yellow
+    python -m venv venv
+    & "venv\Scripts\Activate.ps1"
+    Write-Host "必要なパッケージをインストール中..." -ForegroundColor Cyan
     pip install -r requirements.txt
-    Write-Host "依存関係のインストールが完了しました" -ForegroundColor Green
-} catch {
-    Write-Host "警告: 依存関係のインストールでエラーが発生しました" -ForegroundColor Yellow
-    Write-Host "既にインストールされている場合は問題ありません" -ForegroundColor Yellow
 }
 
-Write-Host ""
+# アプリケーションを起動
+Write-Host "アプリケーションを起動中..." -ForegroundColor Green
+streamlit run app.py
 
-# Streamlitアプリケーションを起動
-Write-Host "Streamlitアプリケーションを起動中..." -ForegroundColor Yellow
-Write-Host "ブラウザが自動で開きます" -ForegroundColor Green
-Write-Host "アプリケーションを停止するには、このウィンドウで Ctrl+C を押してください" -ForegroundColor Green
-Write-Host ""
-
-try {
-    streamlit run app.py
-} catch {
-    Write-Host "アプリケーションの起動でエラーが発生しました" -ForegroundColor Red
-    Write-Host "エラー詳細: $_" -ForegroundColor Red
-}
-
-Write-Host ""
-Write-Host "アプリケーションが終了しました" -ForegroundColor Cyan
 Read-Host "Enterキーを押して終了"

@@ -57,19 +57,43 @@ st.markdown("""
 # アプリケーションの初期化
 @st.cache_resource
 def init_analyzer():
-    return TextAnalyzer()
+    try:
+        return TextAnalyzer()
+    except Exception as e:
+        st.error(f"テキスト分析器の初期化に失敗しました: {str(e)}")
+        return None
 
 def init_database():
     """データベースを初期化（キャッシュなし）"""
-    return DatabaseManager()
+    try:
+        return DatabaseManager()
+    except Exception as e:
+        st.error(f"データベースの初期化に失敗しました: {str(e)}")
+        return None
 
 @st.cache_resource
 def init_url_analyzer():
-    return URLAnalyzer()
+    try:
+        return URLAnalyzer()
+    except Exception as e:
+        st.error(f"URL分析器の初期化に失敗しました: {str(e)}")
+        return None
 
+# 初期化の確認
 analyzer = init_analyzer()
+if analyzer is None:
+    st.error("テキスト分析器の初期化に失敗しました。アプリケーションを再起動してください。")
+    st.stop()
+
 db_manager = init_database()
+if db_manager is None:
+    st.error("データベースの初期化に失敗しました。アプリケーションを再起動してください。")
+    st.stop()
+
 url_analyzer = init_url_analyzer()
+if url_analyzer is None:
+    st.error("URL分析器の初期化に失敗しました。アプリケーションを再起動してください。")
+    st.stop()
 
 # ファイルダウンロード機能
 def get_download_link(data, filename, file_type):
@@ -90,7 +114,17 @@ def main():
     # データベースの初期化確認
     try:
         # データベースの状態を確認
-        db_manager.debug_database_state()
+        debug_info = db_manager.debug_database_state()
+        if debug_info is None:
+            st.error("データベースの状態確認に失敗しました")
+            st.info("データベースを再初期化しています...")
+            try:
+                # データベースを再初期化
+                db_manager = DatabaseManager()
+                st.success("データベースの初期化が完了しました")
+            except Exception as e2:
+                st.error(f"データベースの再初期化に失敗しました: {str(e2)}")
+                st.stop()
     except Exception as e:
         st.error(f"データベースの初期化に失敗しました: {str(e)}")
         st.info("データベースを再初期化しています...")
@@ -119,16 +153,21 @@ def main():
         st.session_state.current_page = page
         st.rerun()
     
-    if st.session_state.current_page == "🏠 ホーム":
-        show_home_page()
-    elif st.session_state.current_page == "📝 テキスト分析":
-        show_analysis_page()
-    elif st.session_state.current_page == "📚 分析履歴":
-        show_history_page()
-    elif st.session_state.current_page == "📊 統計情報":
-        show_statistics_page()
-    elif st.session_state.current_page == "💾 データ管理":
-        show_data_management_page()
+    try:
+        if st.session_state.current_page == "🏠 ホーム":
+            show_home_page()
+        elif st.session_state.current_page == "📝 テキスト分析":
+            show_analysis_page()
+        elif st.session_state.current_page == "📚 分析履歴":
+            show_history_page()
+        elif st.session_state.current_page == "📊 統計情報":
+            show_statistics_page()
+        elif st.session_state.current_page == "💾 データ管理":
+            show_data_management_page()
+    except Exception as e:
+        st.error(f"ページの表示中にエラーが発生しました: {str(e)}")
+        st.error("アプリケーションを再起動してください。")
+        st.stop()
 
 def show_home_page():
     """ホームページ"""
@@ -140,17 +179,30 @@ def show_home_page():
     """, unsafe_allow_html=True)
     
     # 統計情報の表示
-    stats = db_manager.get_statistics()
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("総分析数", f"{stats['total_analyses']:,}")
-    with col2:
-        st.metric("平均テキスト長", f"{stats['avg_text_length']:,} 文字")
-    with col3:
-        st.metric("最も一般的な言語", stats['most_common_language'])
-    with col4:
-        st.metric("平均感情スコア", f"{stats['avg_sentiment_score']:.1f}%")
+    try:
+        stats = db_manager.get_statistics()
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("総分析数", f"{stats['total_analyses']:,}")
+        with col2:
+            st.metric("平均テキスト長", f"{stats['avg_text_length']:,} 文字")
+        with col3:
+            st.metric("最も一般的な言語", stats['most_common_language'])
+        with col4:
+            st.metric("平均感情スコア", f"{stats['avg_sentiment_score']:.1f}%")
+    except Exception as e:
+        st.warning("統計情報の取得に失敗しました。データベースの状態を確認してください。")
+        # デフォルト値を表示
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("総分析数", "0")
+        with col2:
+            st.metric("平均テキスト長", "0 文字")
+        with col3:
+            st.metric("最も一般的な言語", "不明")
+        with col4:
+            st.metric("平均感情スコア", "0%")
     
     st.markdown("---")
     
@@ -486,27 +538,35 @@ def show_history_page():
     st.header("📚 分析履歴")
     
     # 履歴データの取得
-    df = db_manager.get_all_analyses()
-    
-    # デバッグ情報を表示
-    st.write(f"データベースから取得した行数: {len(df)}")
-    if not df.empty:
-        st.write(f"データフレームの列: {list(df.columns)}")
-        st.write(f"最初の行のID: {df.iloc[0]['id'] if 'id' in df.columns else 'ID列なし'}")
+    try:
+        df = db_manager.get_all_analyses()
+        
+        # デバッグ情報を表示
+        st.write(f"データベースから取得した行数: {len(df)}")
+        if not df.empty:
+            st.write(f"データフレームの列: {list(df.columns)}")
+            st.write(f"最初の行のID: {df.iloc[0]['id'] if 'id' in df.columns else 'ID列なし'}")
+    except Exception as e:
+        st.error(f"分析履歴の取得に失敗しました: {str(e)}")
+        st.info("データベースの状態を確認してください。")
+        return
     
     # データベースの状態を確認
     if st.button("🔍 データベース状態を確認"):
-        debug_info = db_manager.debug_database_state()
-        if debug_info:
-            st.write("**データベース状態:**")
-            st.write(f"- 総件数: {debug_info['total_count']}")
-            st.write(f"- 最小ID: {debug_info['min_id']}")
-            st.write(f"- 最大ID: {debug_info['max_id']}")
-            st.write("**テーブル構造:**")
-            for col in debug_info['table_info']:
-                st.write(f"- {col[1]} ({col[2]})")
-        else:
-            st.error("データベース状態の取得に失敗しました")
+        try:
+            debug_info = db_manager.debug_database_state()
+            if debug_info:
+                st.write("**データベース状態:**")
+                st.write(f"- 総件数: {debug_info['total_count']}")
+                st.write(f"- 最小ID: {debug_info['min_id']}")
+                st.write(f"- 最大ID: {debug_info['max_id']}")
+                st.write("**テーブル構造:**")
+                for col in debug_info['table_info']:
+                    st.write(f"- {col[1]} ({col[2]})")
+            else:
+                st.error("データベース状態の取得に失敗しました")
+        except Exception as e:
+            st.error(f"データベース状態の確認に失敗しました: {str(e)}")
     
     if df.empty:
         st.info("まだ分析履歴がありません。テキスト分析を行ってください。")
@@ -646,72 +706,91 @@ def show_statistics_page():
     """統計情報ページ"""
     st.header("📊 統計情報")
     
-    stats = db_manager.get_statistics()
-    df = db_manager.get_all_analyses()
-    
-    if df.empty:
-        st.info("まだ分析データがありません。")
-        return
-    
-    # 基本統計
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("総分析数", f"{stats['total_analyses']:,}")
-    with col2:
-        st.metric("平均テキスト長", f"{stats['avg_text_length']:,} 文字")
-    with col3:
-        st.metric("最も一般的な言語", stats['most_common_language'])
-    with col4:
-        st.metric("平均感情スコア", f"{stats['avg_sentiment_score']:.1f}%")
-    
-    st.markdown("---")
-    
-    # 言語分布
-    st.subheader("🌍 言語分布")
-    language_counts = df['language_detection'].apply(
-        lambda x: x.get('language_name', '不明') if x else '不明'
-    ).value_counts()
-    
-    fig = px.pie(
-        values=language_counts.values,
-        names=language_counts.index,
-        title="分析されたテキストの言語分布"
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # 感情分布
-    st.subheader("💝 感情分布")
-    sentiment_counts = df['sentiment_analysis'].apply(
-        lambda x: x.get('sentiment', '不明') if x else '不明'
-    ).value_counts()
-    
-    fig = px.bar(
-        x=sentiment_counts.index,
-        y=sentiment_counts.values,
-        title="感情分析の結果分布"
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # テキスト長の分布
-    st.subheader("📏 テキスト長の分布")
-    fig = px.histogram(
-        df, x='text_length',
-        title="テキスト長の分布",
-        labels={'text_length': '文字数', 'count': '件数'}
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    try:
+        stats = db_manager.get_statistics()
+        df = db_manager.get_all_analyses()
+        
+        if df.empty:
+            st.info("まだ分析データがありません。")
+            return
+        
+        # 基本統計
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("総分析数", f"{stats['total_analyses']:,}")
+        with col2:
+            st.metric("平均テキスト長", f"{stats['avg_text_length']:,} 文字")
+        with col3:
+            st.metric("最も一般的な言語", stats['most_common_language'])
+        with col4:
+            st.metric("平均感情スコア", f"{stats['avg_sentiment_score']:.1f}%")
+        
+        st.markdown("---")
+        
+        # 言語分布
+        st.subheader("🌍 言語分布")
+        try:
+            language_counts = df['language_detection'].apply(
+                lambda x: x.get('language_name', '不明') if x else '不明'
+            ).value_counts()
+            
+            fig = px.pie(
+                values=language_counts.values,
+                names=language_counts.index,
+                title="分析されたテキストの言語分布"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.warning(f"言語分布の表示に失敗しました: {str(e)}")
+        
+        # 感情分布
+        st.subheader("💝 感情分布")
+        try:
+            sentiment_counts = df['sentiment_analysis'].apply(
+                lambda x: x.get('sentiment', '不明') if x else '不明'
+            ).value_counts()
+            
+            fig = px.bar(
+                x=sentiment_counts.index,
+                y=sentiment_counts.values,
+                title="感情分析の結果分布"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.warning(f"感情分布の表示に失敗しました: {str(e)}")
+        
+        # テキスト長の分布
+        st.subheader("📏 テキスト長の分布")
+        try:
+            fig = px.histogram(
+                df, x='text_length',
+                title="テキスト長の分布",
+                labels={'text_length': '文字数', 'count': '件数'}
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.warning(f"テキスト長分布の表示に失敗しました: {str(e)}")
+            
+    except Exception as e:
+        st.error(f"統計情報の取得に失敗しました: {str(e)}")
+        st.info("データベースの状態を確認してください。")
 
 def show_data_management_page():
     """データ管理ページ"""
     st.header("💾 データ管理")
     
-    df = db_manager.get_all_analyses()
-    
-    # デバッグ情報を表示
-    st.write(f"データベースから取得した行数: {len(df)}")
-    if not df.empty:
-        st.write(f"データフレームの列: {list(df.columns)}")
-        st.write(f"最初の行のID: {df.iloc[0]['id'] if 'id' in df.columns else 'ID列なし'}")
+    try:
+        df = db_manager.get_all_analyses()
+        
+        # デバッグ情報を表示
+        st.write(f"データベースから取得した行数: {len(df)}")
+        if not df.empty:
+            st.write(f"データフレームの列: {list(df.columns)}")
+            st.write(f"最初の行のID: {df.iloc[0]['id'] if 'id' in df.columns else 'ID列なし'}")
+    except Exception as e:
+        st.error(f"データの取得に失敗しました: {str(e)}")
+        st.info("データベースの状態を確認してください。")
+        return
     
     if df.empty:
         st.info("まだ分析データがありません。")
@@ -1001,4 +1080,16 @@ def display_results(results):
                 st.plotly_chart(fig, use_container_width=True)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        st.error(f"アプリケーションで予期しないエラーが発生しました: {str(e)}")
+        st.error("アプリケーションを再起動してください。")
+        st.error(f"エラーの詳細: {type(e).__name__}")
+        
+        # エラーの詳細情報を表示（開発用）
+        import traceback
+        with st.expander("エラーの詳細（開発者用）"):
+            st.code(traceback.format_exc())
+        
+        st.stop()

@@ -18,6 +18,11 @@ class DatabaseManager:
     def init_database(self):
         """データベースの初期化"""
         try:
+            # データベースディレクトリの確認と作成
+            db_dir = os.path.dirname(self.db_path)
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir)
+            
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
@@ -71,59 +76,84 @@ class DatabaseManager:
             else:
                 raise e
     
+    def get_connection(self):
+        """データベース接続を取得"""
+        try:
+            return sqlite3.connect(self.db_path)
+        except Exception as e:
+            print(f"データベース接続エラー: {str(e)}")
+            raise e
+    
     def save_analysis_result(self, text_content, results, file_name=None, file_size=None):
         """分析結果をデータベースに保存"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        text_length = len(text_content)
-        
-        cursor.execute('''
-            INSERT INTO analysis_results (
-                timestamp, text_content, text_length, analysis_type,
-                basic_stats, language_detection, sentiment_analysis,
-                readability_score, word_frequency, sentence_analysis,
-                character_analysis, file_name, file_size
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            timestamp, text_content, text_length, "comprehensive",
-            json.dumps(results['basic_stats']),
-            json.dumps(results['language_detection']),
-            json.dumps(results['sentiment_analysis']),
-            json.dumps(results['readability_score']),
-            json.dumps(results['word_frequency']),
-            json.dumps(results['sentence_analysis']),
-            json.dumps(results['character_analysis']),
-            file_name, file_size
-        ))
-        
-        conn.commit()
-        conn.close()
-        
-        return cursor.lastrowid
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            text_length = len(text_content)
+            
+            cursor.execute('''
+                INSERT INTO analysis_results (
+                    timestamp, text_content, text_length, analysis_type,
+                    basic_stats, language_detection, sentiment_analysis,
+                    readability_score, word_frequency, sentence_analysis,
+                    character_analysis, file_name, file_size
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                timestamp, text_content, text_length, "comprehensive",
+                json.dumps(results['basic_stats']),
+                json.dumps(results['language_detection']),
+                json.dumps(results['sentiment_analysis']),
+                json.dumps(results['readability_score']),
+                json.dumps(results['word_frequency']),
+                json.dumps(results['sentence_analysis']),
+                json.dumps(results['character_analysis']),
+                file_name, file_size
+            ))
+            
+            conn.commit()
+            analysis_id = cursor.lastrowid
+            conn.close()
+            
+            print(f"分析結果を保存しました。ID: {analysis_id}")
+            return analysis_id
+            
+        except Exception as e:
+            print(f"分析結果の保存に失敗: {str(e)}")
+            if 'conn' in locals():
+                conn.close()
+            raise e
     
     def get_all_analyses(self):
         """すべての分析結果を取得"""
-        conn = sqlite3.connect(self.db_path)
-        query = '''
-            SELECT id, timestamp, text_content, text_length, file_name,
-                   basic_stats, language_detection, sentiment_analysis,
-                   readability_score, word_frequency, sentence_analysis,
-                   character_analysis
-            FROM analysis_results
-            ORDER BY timestamp DESC
-        '''
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        
-        # JSON文字列を辞書に変換
-        for col in ['basic_stats', 'language_detection', 'sentiment_analysis',
-                   'readability_score', 'word_frequency', 'sentence_analysis',
-                   'character_analysis']:
-            df[col] = df[col].apply(lambda x: json.loads(x) if pd.notna(x) else {})
-        
-        return df
+        try:
+            conn = self.get_connection()
+            query = '''
+                SELECT id, timestamp, text_content, text_length, file_name,
+                       basic_stats, language_detection, sentiment_analysis,
+                       readability_score, word_frequency, sentence_analysis,
+                       character_analysis
+                FROM analysis_results
+                ORDER BY timestamp DESC
+            '''
+            df = pd.read_sql_query(query, conn)
+            conn.close()
+            
+            if df.empty:
+                return df
+            
+            # JSON文字列を辞書に変換
+            for col in ['basic_stats', 'language_detection', 'sentiment_analysis',
+                       'readability_score', 'word_frequency', 'sentence_analysis',
+                       'character_analysis']:
+                df[col] = df[col].apply(lambda x: json.loads(x) if pd.notna(x) else {})
+            
+            return df
+            
+        except Exception as e:
+            print(f"分析結果の取得に失敗: {str(e)}")
+            return pd.DataFrame()
     
     def get_analysis_by_id(self, analysis_id):
         """特定の分析結果を取得"""
@@ -134,39 +164,44 @@ class DatabaseManager:
             print(f"無効なID形式: {analysis_id} (型: {type(analysis_id)})")
             return None
         
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # 列名を事前に取得
-        cursor.execute("PRAGMA table_info(analysis_results)")
-        table_info = cursor.fetchall()
-        columns = [col[1] for col in table_info]
-        
-        cursor.execute('''
-            SELECT * FROM analysis_results WHERE id = ?
-        ''', (analysis_id,))
-        
-        result = cursor.fetchone()
-        conn.close()
-        
-        if result:
-            # 結果を辞書形式に変換
-            analysis_dict = dict(zip(columns, result))
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
             
-            # JSON文字列を辞書に変換
-            for col in ['basic_stats', 'language_detection', 'sentiment_analysis',
-                       'readability_score', 'word_frequency', 'sentence_analysis',
-                       'character_analysis']:
-                if analysis_dict.get(col):
-                    try:
-                        analysis_dict[col] = json.loads(analysis_dict[col])
-                    except json.JSONDecodeError as e:
-                        print(f"JSON解析エラー (列: {col}): {str(e)}")
-                        analysis_dict[col] = {}
+            # 列名を事前に取得
+            cursor.execute("PRAGMA table_info(analysis_results)")
+            table_info = cursor.fetchall()
+            columns = [col[1] for col in table_info]
             
-            return analysis_dict
-        
-        return None
+            cursor.execute('''
+                SELECT * FROM analysis_results WHERE id = ?
+            ''', (analysis_id,))
+            
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                # 結果を辞書形式に変換
+                analysis_dict = dict(zip(columns, result))
+                
+                # JSON文字列を辞書に変換
+                for col in ['basic_stats', 'language_detection', 'sentiment_analysis',
+                           'readability_score', 'word_frequency', 'sentence_analysis',
+                           'character_analysis']:
+                    if analysis_dict.get(col):
+                        try:
+                            analysis_dict[col] = json.loads(analysis_dict[col])
+                        except json.JSONDecodeError as e:
+                            print(f"JSON解析エラー (列: {col}): {str(e)}")
+                            analysis_dict[col] = {}
+                
+                return analysis_dict
+            
+            return None
+            
+        except Exception as e:
+            print(f"分析結果の取得に失敗: {str(e)}")
+            return None
     
     def delete_analysis(self, analysis_id):
         """分析結果を削除"""
@@ -178,7 +213,7 @@ class DatabaseManager:
             return False
         
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.get_connection()
             cursor = conn.cursor()
             
             # 削除前の確認
@@ -215,6 +250,7 @@ class DatabaseManager:
             print(f"削除成功判定: {success}")
             
             return success
+            
         except Exception as e:
             print(f"削除処理でエラー: {str(e)}")
             return False
@@ -363,53 +399,63 @@ class DatabaseManager:
     
     def get_statistics(self):
         """統計情報を取得"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # 総分析数
-        cursor.execute('SELECT COUNT(*) FROM analysis_results')
-        total_analyses = cursor.fetchone()[0]
-        
-        # 平均テキスト長
-        cursor.execute('SELECT AVG(text_length) FROM analysis_results')
-        avg_text_length = cursor.fetchone()[0] or 0
-        
-        # デバッグ情報
-        print(f"統計情報: 総分析数={total_analyses}, 平均テキスト長={avg_text_length}")
-        
-        # 最も一般的な言語
-        cursor.execute('''
-            SELECT language_detection, COUNT(*) as count
-            FROM analysis_results
-            GROUP BY language_detection
-            ORDER BY count DESC
-            LIMIT 1
-        ''')
-        result = cursor.fetchone()
-        most_common_language = "不明"
-        if result and result[0]:
-            try:
-                lang_data = json.loads(result[0])
-                most_common_language = lang_data.get('language_name', '不明')
-            except:
-                pass
-        
-        # 平均感情スコア
-        cursor.execute('''
-            SELECT AVG(CAST(
-                json_extract(sentiment_analysis, '$.polarity_percentage') AS REAL
-            )) FROM analysis_results
-        ''')
-        avg_sentiment_score = cursor.fetchone()[0] or 0
-        
-        conn.close()
-        
-        return {
-            'total_analyses': total_analyses,
-            'avg_text_length': round(avg_text_length, 1),
-            'most_common_language': most_common_language,
-            'avg_sentiment_score': round(avg_sentiment_score, 1)
-        }
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # 総分析数
+            cursor.execute('SELECT COUNT(*) FROM analysis_results')
+            total_analyses = cursor.fetchone()[0]
+            
+            # 平均テキスト長
+            cursor.execute('SELECT AVG(text_length) FROM analysis_results')
+            avg_text_length = cursor.fetchone()[0] or 0
+            
+            # デバッグ情報
+            print(f"統計情報: 総分析数={total_analyses}, 平均テキスト長={avg_text_length}")
+            
+            # 最も一般的な言語
+            cursor.execute('''
+                SELECT language_detection, COUNT(*) as count
+                FROM analysis_results
+                GROUP BY language_detection
+                ORDER BY count DESC
+                LIMIT 1
+            ''')
+            result = cursor.fetchone()
+            most_common_language = "不明"
+            if result and result[0]:
+                try:
+                    lang_data = json.loads(result[0])
+                    most_common_language = lang_data.get('language_name', '不明')
+                except:
+                    pass
+            
+            # 平均感情スコア
+            cursor.execute('''
+                SELECT AVG(CAST(
+                    json_extract(sentiment_analysis, '$.polarity_percentage') AS REAL
+                )) FROM analysis_results
+            ''')
+            avg_sentiment_score = cursor.fetchone()[0] or 0
+            
+            conn.close()
+            
+            return {
+                'total_analyses': total_analyses,
+                'avg_text_length': round(avg_text_length, 1),
+                'most_common_language': most_common_language,
+                'avg_sentiment_score': round(avg_sentiment_score, 1)
+            }
+            
+        except Exception as e:
+            print(f"統計情報の取得に失敗: {str(e)}")
+            return {
+                'total_analyses': 0,
+                'avg_text_length': 0,
+                'most_common_language': "不明",
+                'avg_sentiment_score': 0
+            }
     
     def debug_database_state(self):
         """データベースの状態をデバッグ用に表示"""
